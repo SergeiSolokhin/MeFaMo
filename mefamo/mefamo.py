@@ -9,6 +9,7 @@ import time
 import math
 import transforms3d
 import open3d as o3d
+import csv
 
 from pylivelinkface import PyLiveLinkFace, FaceBlendShape
 
@@ -69,7 +70,7 @@ def calculate_rotation(face_landmarks, pcf: PCF, image_shape):
 
    
 class Mefamo():
-    def __init__(self, input = 0, ip = '127.0.0.1', port = 11111, show_3d = False, hide_image = False, show_debug = False) -> None:
+    def __init__(self, input, width=480, height=640, ip = '127.0.0.1', port = 11111, show_3d = False, hide_image = False, show_debug = False) -> None:
 
         self.input = input
         self.show_image = not hide_image
@@ -88,7 +89,7 @@ class Mefamo():
         self.ip = ip
         self.upd_port = port
         
-        self.image_height, self.image_width, channels = (480, 640, 3)
+        self.image_height, self.image_width, channels = (width, height, 3)
 
         # pseudo camera internals
         focal_length = self.image_width
@@ -127,12 +128,9 @@ class Mefamo():
                 input = int(self.input)
             except ValueError:
                 input = self.input  
-
-        if os.name == 'nt':
-            # will improve webcam input startup on windows 
-            cap = cv2.VideoCapture(input, cv2.CAP_DSHOW)   
-        else:
-            cap = cv2.VideoCapture(input)                
+        print (input)
+        
+        cap = cv2.VideoCapture(input)                
 
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.image_width)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.image_height)
@@ -140,22 +138,39 @@ class Mefamo():
         # run the network loop in a separate thread
         self.network_thread.start()
 
+        frameIndex = 0
+
         if cap is not None:
+
+            f = open('output.csv', 'w', encoding='UTF8', newline='')
+            writer = csv.writer(f)
+
+            header = ['frame', 'timestamp', 'pose_Tx', 'pose_Ty', 'pose_Tz', 'pose_Rx', 'pose_Ry', 'pose_Rz']
+
+            for i in range(468):
+                stri = str(i)
+                header += ['X_'+stri, 'Y_'+stri, 'Z_'+stri]
+
+            writer.writerow(header)
+
             # for camera and videos
             while cap.isOpened():
                 success, image = cap.read()
                 if not success:
                     print("Ignoring empty camera frame.")
-                    continue
-                if not self._process_image(image):
+                    break
+                if not self._process_image(image, frameIndex, writer):
                     break    
+                frameIndex += 1
             print("Video capture received no more frames.")                
             cap.release()
         
+            f.close()
+
         else:
             # for input images
             while image is not None:
-                if not self._process_image(image):
+                if not self._process_image(image, 0):
                     break
 
     def _network_loop(self):
@@ -168,7 +183,8 @@ class Mefamo():
                         self.got_new_data = False
                 time.sleep(0.01)
 
-    def _process_image(self, image):   
+    def _process_image(self, image, frameIndex, writer=None):  
+        print ("processing image") 
         # To improve performance, optionally mark the image as not writeable to
         # pass by reference.
         image.flags.writeable = False
@@ -186,6 +202,23 @@ class Mefamo():
                 # draw a 3d image of the face
                 if self.show_3d:
                     face_image_3d = Drawing.draw_3d_face(metric_landmarks, image)
+
+                if writer is not None:
+                    #scale, shear, angles, trans, persp = transforms3d.decompose_matrix(pose_transform_mat)
+                    eulerAngles = transforms3d.euler.mat2euler(pose_transform_mat)
+                    pitch = -eulerAngles[0]
+                    yaw = eulerAngles[1]
+                    roll = eulerAngles[2]
+                    data = [frameIndex, 0.0, 0.0, 0.0, 0.0, pitch, yaw, roll]
+                        
+                    # From numpy to Open3D
+                    points = o3d.utility.Vector3dVector(metric_landmarks[0:3].T)
+                    
+                    # add metric landmarks
+                    for i in range(468):
+                        data += [points[i][0], points[i][1], points[i][2]]
+
+                    writer.writerow(data)
 
                 # draw the face mesh 
                 drawing_utils.draw_landmarks(
