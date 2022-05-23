@@ -13,11 +13,11 @@ import csv
 
 from pylivelinkface import PyLiveLinkFace, FaceBlendShape
 
-from mefamo.utils.drawing import Drawing
-from mefamo.blendshapes.blendshape_calculator import BlendshapeCalculator
+from utils.drawing import Drawing
+from blendshapes.blendshape_calculator import BlendshapeCalculator
 
 # taken from: https://github.com/Rassibassi/mediapipeDemos
-from mefamo.custom.face_geometry import (  # isort:skip
+from custom.face_geometry import (  # isort:skip
     PCF,
     get_metric_landmarks,
     procrustes_landmark_basis,
@@ -113,6 +113,9 @@ class Mefamo():
         self.network_thread = threading.Thread(target=self._network_loop, daemon=True)
         self.image = None
     
+    def exportCSV2(self):
+        print ('test')
+
     # starts the program and all its threads
     def start(self):        
         cap = None
@@ -184,7 +187,7 @@ class Mefamo():
                 time.sleep(0.01)
 
     def _process_image(self, image, frameIndex, writer=None):  
-        print ("processing image") 
+        
         # To improve performance, optionally mark the image as not writeable to
         # pass by reference.
         image.flags.writeable = False
